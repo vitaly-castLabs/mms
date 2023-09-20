@@ -76,7 +76,7 @@ function fetchWithXHR(uri, onLoadFunction) {
 
 function range(start, end) {
   var rv = [];
-  for (var i = start; i < end; ++i) {
+  for (var i = start; i <= end; ++i) {
     rv.push(i);
   }
   return rv;

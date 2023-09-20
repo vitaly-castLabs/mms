@@ -1,11 +1,13 @@
 'use strict'
 
-function runWithManagedMSE(testFunction, id = 'log') {
-    var el = document.createElement('video');
-    el.disableRemotePlayback = true;
-    el.controls = true;
-    document.body.appendChild(el);
+const params = new URLSearchParams(window.location.search);
+let serverCertificatePath = params.get('crt') || '';
+let serverLicensePath = params.get('lic') || '';
 
+const video = document.querySelector('video');
+video.disableRemotePlayback = true;
+
+function runWithManagedMSE(testFunction, id = 'log') {
     var log = document.createElement('pre');
     log.setAttribute('id', id);
     document.body.appendChild(log);
@@ -18,10 +20,10 @@ function runWithManagedMSE(testFunction, id = 'log') {
     }
     var ms = new ManagedMediaSource();
 
-    el.src = URL.createObjectURL(ms);
-    el.preload = 'auto';
+    video.src = URL.createObjectURL(ms);
+    video.preload = 'auto';
 
-    testFunction(ms, el);
+    testFunction(ms, video);
 }
 
 function logEvents(events, target) {
@@ -45,10 +47,62 @@ function startUp() {
 
         await once(ms, 'sourceopen');
         ok(true, 'Receive a sourceopen event');
-        var sb = ms.addSourceBuffer('video/mp4; codecs="mp4a.40.2,avc1.4d4015"');
-        await fetchAndLoad(sb, './media/bipbopinit', [''], '.mp4');
-        await fetchAndLoad(sb, './media/bipbop', range(1, 13), '.m4s');
+        var sb = ms.addSourceBuffer('video/mp4');
+
+        const encrypted = await loadCertificate();
+
+        if (encrypted) {
+            // encrypted media
+            await fetchAndWaitForEncrypted(el, sb, './media/bipbop-encrypted.mp4');
+        }
+        else  {
+            await fetchAndLoad(sb, './media/bipbopinit', [''], '.mp4');
+            await fetchAndLoad(sb, './media/bipbop', range(1, 13), '.m4s');
+        }
         ms.endOfStream();
     });
 }
 window.startUp = startUp
+
+async function encrypted(event) {
+    console.log('encrypted event:', event);
+    try {
+        let initDataType = event.initDataType;
+        if (initDataType !== 'sinf') {
+            window.console.error(`Received unexpected initialization data type "${initDataType}"`);
+            return;
+        }
+
+        let video = event.target;
+        if (!video.mediaKeys) {
+            let access = await navigator.requestMediaKeySystemAccess('com.apple.fps', [{
+                initDataTypes: [initDataType],
+                audioCapabilities: [{ contentType: 'audio/mp4', robustness: '' }],
+                videoCapabilities: [{ contentType: 'video/mp4', robustness: '' }],
+                distinctiveIdentifier: 'not-allowed',
+                persistentState: 'not-allowed',
+                sessionTypes: ['temporary']
+            }]);
+
+            let keys = await access.createMediaKeys();
+            await keys.setServerCertificate(window.certificate);
+            await video.setMediaKeys(keys);
+        }
+
+        let initData = event.initData;
+
+        let session = video.mediaKeys.createSession();
+        session.generateRequest(initDataType, initData);
+
+        let message = await waitFor(session, 'message');
+        let licensePath = params.get('lic') || '';
+        if (!licensePath.startsWith('http'))
+            licensePath = `https://${licensePath}`;
+        let response = await getResponse(message, licensePath);
+        await session.update(response);
+
+        return session;
+    } catch(e) {
+        alert(`Could not start encrypted playback due to exception "${e}"`)
+    }
+}
