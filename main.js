@@ -65,7 +65,6 @@ function startUp() {
 window.startUp = startUp
 
 async function encrypted(event) {
-    console.log('encrypted event:', event);
     try {
         let initDataType = event.initDataType;
         if (initDataType !== 'sinf') {

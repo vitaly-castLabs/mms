@@ -26,24 +26,18 @@ function waitFor(target, type) {
 }
 
 async function fetchBuffer(url) {
-    console.log('fetchBuffer:', url);
     let result = await fetch(url);
-    console.log('fetch done');
     let buffer = await result.arrayBuffer();
-    console.log('result ready');
     return buffer;
 }
 
 async function fetchAndAppend(sourceBuffer, url) {
     let buffer = await fetchBuffer(url);
     sourceBuffer.appendBuffer(buffer);
-    console.log('1')
     await waitFor(sourceBuffer, 'updateend');
-    console.log('2')
 }
 
 async function fetchAndWaitForEncrypted(video, sourceBuffer, url) {
-    console.log('fetchAndWaitForEncrypted:', url);
     let updateEndPromise = fetchAndAppend(sourceBuffer, url);
     let event = await waitFor(video, 'encrypted');
     let session = await encrypted(event);
@@ -94,8 +88,6 @@ async function getResponse(event, spcPath) {
         }
     );
     let response = await fetch(request);
-    console.log('response:', response);
     let license = await response.text();
-    console.log('license:', license);
     return base64DecodeUint8Array(license);
 }
